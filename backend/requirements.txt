@@ -1,0 +1,18 @@
+Flask==2.3.2
+Flask-CORS==4.0.0
+alpaca-trade-api==3.0.0
+yfinance==0.2.66
+pandas==2.0.3
+numpy==1.24.3
+APScheduler==3.10.1
+python-dotenv==1.0.0
+requests==2.31.0
+pytz==2023.3
+
+# HTML parsing libraries for pandas.read_html fallback
+beautifulsoup4==4.12.2
+lxml==4.9.3
+
+# Fix Python 3.8 compatibility for yfinance dependency chain
+multitasking==0.0.11
+typing_extensions>=4.8.0
