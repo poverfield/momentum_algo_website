@@ -10,9 +10,6 @@ python-dotenv==1.0.0
 requests==2.31.0
 pytz==2023.3
 
-# Ensure aiohttp uses a wheel (avoid building C extensions on Render)
-aiohttp==3.9.5
-
 # Satisfy alpaca-trade-api websockets constraint
 websockets>=9.0,<11
 
