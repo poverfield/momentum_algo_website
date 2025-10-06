@@ -8,4 +8,4 @@ pip install -U pip setuptools wheel
 (cd ../frontend && npm ci && npm run build)
 
 # Install backend dependencies
-pip install -r requirements.txt
+pip install --no-build-isolation -r requirements.txt
