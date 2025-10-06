@@ -10,6 +10,9 @@ python-dotenv==1.0.0
 requests==2.31.0
 pytz==2023.3
 
+# Ensure aiohttp uses a wheel (avoid building C extensions on Render)
+aiohttp==3.9.5
+
 # Satisfy alpaca-trade-api websockets constraint
 websockets>=9.0,<11
 
@@ -20,3 +23,7 @@ lxml==4.9.3
 # Fix Python 3.8 compatibility for yfinance dependency chain
 multitasking==0.0.11
 typing_extensions>=4.8.0
+
+# Modern build tooling (helps with PEP 517 builds)
+setuptools>=75.0.0
+wheel>=0.44.0
