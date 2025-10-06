@@ -24,3 +24,40 @@ table{width:100%;border-collapse:collapse}
 th,td{padding:8px;border-bottom:1px solid var(--border);text-align:left}
 th{color:var(--muted);font-weight:600}
 .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+
+/* Responsive: general tweaks */
+@media (max-width: 1024px){
+  .app-header h1{font-size:16px}
+  .app-main{padding:12px}
+  .card{margin:10px 0;padding:12px}
+}
+
+/* Responsive: header/nav handling */
+@media (max-width: 768px){
+  .app-header{flex-wrap:wrap;gap:8px}
+  .app-header nav{flex-wrap:nowrap;overflow-x:auto;gap:8px;padding-bottom:4px}
+  .app-header nav::-webkit-scrollbar{height:6px}
+  .app-header nav::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+  .app-header a{white-space:nowrap;padding:6px 10px}
+  .kpis{flex-wrap:wrap}
+  .grid.two{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+}
+
+/* Responsive: small phones */
+@media (max-width: 480px){
+  body{font-size:13px}
+  .app-header{padding:10px 12px}
+  .app-header h1{font-size:15px}
+  .app-main{padding:10px}
+  .card{padding:10px}
+  .row{flex-wrap:wrap}
+  button{width:100%}
+  .controls{gap:8px}
+  th,td{padding:6px}
+  .grid.two{grid-template-columns:1fr}
+}
+
+/* Table responsiveness: allow horizontal scroll on narrow screens */
+.table-wrap{width:100%;overflow-x:auto}
+table{min-width:600px}
+
