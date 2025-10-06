@@ -1,13 +1,17 @@
 Flask==2.3.2
 Flask-CORS==4.0.0
 alpaca-trade-api==3.0.0
-yfinance==0.2.66
+# Pin yfinance to a version that does not require websockets>=13
+yfinance==0.2.18
 pandas==2.0.3
 numpy==1.24.3
 APScheduler==3.10.1
 python-dotenv==1.0.0
 requests==2.31.0
 pytz==2023.3
+
+# Satisfy alpaca-trade-api websockets constraint
+websockets>=9.0,<11
 
 # HTML parsing libraries for pandas.read_html fallback
 beautifulsoup4==4.12.2
