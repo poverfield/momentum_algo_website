@@ -8,11 +8,27 @@ export default function Runs() {
   const [status, setStatus] = useState('')
   const [date, setDate] = useState('')
   const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(false)
+
+  function formatEst(dateStr) {
+    if (!dateStr) return ''
+    try {
+      const d = new Date(dateStr)
+      return d.toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' ET'
+    } catch {
+      return dateStr
+    }
+  }
 
   async function load() {
-    const { runs, pagination } = await getRuns({ page, per_page: perPage, status: status || undefined, date: date || undefined })
-    setRows(runs)
-    setTotal(pagination?.total || 0)
+    setLoading(true)
+    try {
+      const { runs, pagination } = await getRuns({ page, per_page: perPage, status: status || undefined, date: date || undefined })
+      setRows(runs)
+      setTotal(pagination?.total || 0)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { load() }, [page, perPage, status, date])
@@ -32,7 +48,7 @@ export default function Runs() {
           <label>Date <input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
           <label>Page <input type="number" min={1} value={page} onChange={e => setPage(+e.target.value)} /></label>
           <label>Per Page <input type="number" min={5} max={100} value={perPage} onChange={e => setPerPage(+e.target.value)} /></label>
-          <button onClick={load}>Reload</button>
+          <button onClick={load} disabled={loading}>{loading ? 'Reloading...' : 'Reload'}</button>
         </div>
         <table>
           <thead>
@@ -43,9 +59,9 @@ export default function Runs() {
           <tbody>
             {rows.map((r, i) => (
               <tr key={i}>
-                <td>{r.created_at}</td>
+                <td>{formatEst(r.created_at)}</td>
                 <td>{r.status}</td>
-                <td>{r.run_date}</td>
+                <td>{formatEst(r.run_date)}</td>
                 <td>{r.signals_generated}</td>
                 <td>{r.trades_executed}</td>
                 <td>{r.error_message || ''}</td>

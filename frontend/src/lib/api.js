@@ -25,6 +25,11 @@ export async function getPositions() {
   return data
 }
 
+export async function refreshPositions() {
+  const { data } = await api.post('/api/positions/refresh')
+  return data
+}
+
 export async function getTrades(params) {
   const { data } = await api.get('/api/trades', { params })
   return data
@@ -46,3 +51,8 @@ export async function getPerformanceSummary() {
 }
 
 export default api
+
+export async function getAccount() {
+  const { data } = await api.get('/api/account')
+  return data
+}

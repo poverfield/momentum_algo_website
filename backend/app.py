@@ -79,8 +79,8 @@ def schedule_algorithm_runs():
             return
         tz_name = os.getenv('SCHEDULE_TIMEZONE', 'America/New_York')
         tz = pytz.timezone(tz_name)
-        # Default to 17:00 (5pm) local market time (ET)
-        times_env = os.getenv('SCHEDULE_TIMES', '17:00')
+        # Default to 16:05 (4:05pm) local market time (ET) right after close
+        times_env = os.getenv('SCHEDULE_TIMES', '16:05')
         times: List[str] = [t.strip() for t in times_env.split(',') if t.strip()]
 
         scheduler = BackgroundScheduler(timezone=tz)
@@ -126,6 +126,24 @@ def health_check():
             'algorithm': True
         }
     })
+
+@app.route('/api/account', methods=['GET'])
+def get_account():
+    """Return Alpaca account summary (portfolio_value, cash, buying_power)."""
+    try:
+        info = alpaca_service.get_account_info()
+        if info is None:
+            return jsonify({'error': 'Alpaca not connected'}), 503
+        return jsonify({
+            'portfolio_value': info.get('portfolio_value'),
+            'cash': info.get('cash'),
+            'buying_power': info.get('buying_power'),
+            'status': info.get('status'),
+            'currency': info.get('currency')
+        })
+    except Exception as e:
+        logger.error(f"Error getting account info: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/dashboard', methods=['GET'])
 def get_dashboard():
@@ -219,6 +237,47 @@ def get_positions():
         return jsonify({'positions': positions})
     except Exception as e:
         logger.error(f"Error getting positions: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/positions/refresh', methods=['POST'])
+def refresh_positions():
+    """Fetch live positions from Alpaca and return them without persisting."""
+    try:
+        # Pull positions directly from Alpaca
+        live_positions = alpaca_service.get_positions()
+
+        # Normalize to frontend schema expected by Positions.jsx
+        normalized = []
+        for p in live_positions:
+            try:
+                symbol = p.get('symbol')
+                qty = int(p.get('quantity') or 0)
+                avg_entry = float(p.get('avg_entry_price')) if p.get('avg_entry_price') is not None else None
+                current_price = float(p.get('current_price')) if p.get('current_price') is not None else None
+
+                unrealized = None
+                unrealized_pct = None
+                if avg_entry is not None and current_price is not None:
+                    unrealized = (current_price - avg_entry) * qty
+                    if avg_entry != 0:
+                        unrealized_pct = ((current_price - avg_entry) / avg_entry) * 100.0
+
+                normalized.append({
+                    'symbol': symbol,
+                    'quantity': qty,
+                    'entry_price': avg_entry,
+                    'entry_date': None,
+                    'current_price': current_price,
+                    'unrealized_pnl': unrealized,
+                    'unrealized_pnl_pct': unrealized_pct
+                })
+            except Exception as inner_e:
+                logger.warning(f"Failed to normalize position {p}: {inner_e}")
+        from datetime import datetime
+        synced_at = datetime.now().isoformat()
+        return jsonify({'positions': normalized, 'source': 'alpaca', 'synced_at': synced_at})
+    except Exception as e:
+        logger.error(f"Error refreshing positions from Alpaca: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/diagnostics', methods=['GET'])

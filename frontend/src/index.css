@@ -61,3 +61,22 @@ th{color:var(--muted);font-weight:600}
 .table-wrap{width:100%;overflow-x:auto}
 table{min-width:600px}
 
+
+/* Table header tooltips and sort indicators */
+.th-sort{display:inline-flex;align-items:center;gap:6px}
+.th-tip{position:relative;text-decoration:underline dotted;text-underline-offset:2px}
+.th-tip:hover::after{
+  content: attr(data-tip);
+  position:absolute;
+  bottom:-36px;
+  left:0;
+  background:#0e1530;
+  color:var(--text);
+  border:1px solid var(--border);
+  padding:6px 8px;
+  border-radius:6px;
+  white-space:nowrap;
+  z-index:5;
+  box-shadow:0 2px 8px rgba(0,0,0,0.3)
+}
+th.sortable{cursor:pointer}

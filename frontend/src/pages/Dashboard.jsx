@@ -1,26 +1,60 @@
 import React, { useEffect, useState } from 'react'
-import { getHealth, postRun, getRuns, getPositions, getTrades } from '../lib/api'
+  import { getHealth, postRun, getRuns, refreshPositions, getTrades, getAccount } from '../lib/api'
 
-export default function Dashboard() {
-  const [health, setHealth] = useState(null)
-  const [runs, setRuns] = useState([])
-  const [positions, setPositions] = useState([])
-  const [trades, setTrades] = useState([])
-  const [loading, setLoading] = useState(false)
+  export default function Dashboard() {
+    const [health, setHealth] = useState(null)
+    const [runs, setRuns] = useState([])
+    const [positions, setPositions] = useState([])
+    const [trades, setTrades] = useState([])
+    const [account, setAccount] = useState(null)
+    const [syncedAt, setSyncedAt] = useState('')
+    const [loading, setLoading] = useState(false)
+
+  function formatCurrency(value) {
+    if (value === null || value === undefined || value === '') return ''
+    const num = Number(value)
+    if (Number.isNaN(num)) return ''
+    const isNegative = num < 0 || Object.is(num, -0)
+    const absNum = Math.abs(num)
+    const withCommas = absNum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    return `${isNegative ? '-' : ''}$${withCommas}`
+  }
+
+  function formatPercent(value) {
+    if (value === null || value === undefined || value === '') return ''
+    const num = Number(value)
+    if (Number.isNaN(num)) return ''
+    const isNegative = num < 0 || Object.is(num, -0)
+    const absNum = Math.abs(num)
+    return `${isNegative ? '-' : ''}${absNum.toFixed(2)}%`
+  }
+
+  function formatEst(dateStr) {
+    if (!dateStr) return ''
+    try {
+      const d = new Date(dateStr)
+      return d.toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' ET'
+    } catch {
+      return dateStr
+    }
+  }
 
   async function load() {
     setLoading(true)
     try {
-      const [h, r, p, t] = await Promise.all([
+      const [h, r, p, t, a] = await Promise.all([
         getHealth(),
         getRuns({ page: 1, per_page: 5 }),
-        getPositions(),
-        getTrades({ page: 1, per_page: 5 })
+        refreshPositions(),
+        getTrades({ page: 1, per_page: 5 }),
+        getAccount()
       ])
       setHealth(h)
       setRuns(r.runs || [])
       setPositions(p.positions || [])
+      setSyncedAt(p.synced_at || '')
       setTrades(t.trades || [])
+      setAccount(a && !a.error ? a : null)
     } finally {
       setLoading(false)
     }
@@ -44,15 +78,25 @@ export default function Dashboard() {
         <div className="row space-between">
           <h2>System Health</h2>
           <div>
-            <button onClick={load} disabled={loading}>Refresh</button>{' '}
+            <button onClick={load} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</button>{' '}
             <button onClick={runNow}>Run Algorithm Now</button>
           </div>
         </div>
+        {account && (
+          <div className="kpis">
+            <div className="kpi"><div className="kpi-label">Portfolio</div><div className="kpi-value">{formatCurrency(account.portfolio_value)}</div></div>
+            <div className="kpi"><div className="kpi-label">Cash</div><div className="kpi-value">{formatCurrency(account.cash)}</div></div>
+            <div className="kpi"><div className="kpi-label">Buying Power</div><div className="kpi-value">{formatCurrency(account.buying_power)}</div></div>
+          </div>
+        )}
         {health && (
           <div className="kpis">
             <div className="kpi"><div className="kpi-label">DB</div><div className="kpi-value">{health.services.database ? 'OK' : 'ERR'}</div></div>
             <div className="kpi"><div className="kpi-label">Alpaca</div><div className="kpi-value">{health.services.alpaca ? 'OK' : 'ERR'}</div></div>
             <div className="kpi"><div className="kpi-label">Status</div><div className="kpi-value">{health.status}</div></div>
+            {syncedAt && (
+              <div className="kpi"><div className="kpi-label">Data Synced At</div><div className="kpi-value">{formatEst(syncedAt)}</div></div>
+            )}
           </div>
         )}
       </div>
@@ -65,9 +109,9 @@ export default function Dashboard() {
             <tbody>
               {runs.map((r,i) => (
                 <tr key={i}>
-                  <td>{r.created_at}</td>
+                  <td>{formatEst(r.created_at)}</td>
                   <td>{r.status}</td>
-                  <td>{r.run_date}</td>
+                  <td>{formatEst(r.run_date)}</td>
                   <td>{r.signals_generated}</td>
                   <td>{r.trades_executed}</td>
                 </tr>
@@ -77,20 +121,28 @@ export default function Dashboard() {
         </div>
         <div className="card">
           <h3>Current Positions</h3>
-          <table>
-            <thead><tr><th>Symbol</th><th>Qty</th><th>Entry</th><th>Current</th><th>Unreal. PnL</th></tr></thead>
-            <tbody>
-              {positions.map((p,i) => (
-                <tr key={i}>
-                  <td>{p.symbol}</td>
-                  <td>{p.quantity}</td>
-                  <td>{p.entry_price}</td>
-                  <td>{p.current_price ?? ''}</td>
-                  <td>{p.unrealized_pnl ?? ''}</td>
+          {positions.length === 0 ? (
+            <div>No positions in Alpaca</div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Symbol</th><th>Qty</th><th>Entry Price</th><th>Current</th><th>Unrealized %</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {positions.map((p,i) => (
+                  <tr key={i}>
+                    <td>{p.symbol}</td>
+                    <td>{p.quantity}</td>
+                    <td>{formatCurrency(p.entry_price)}</td>
+                    <td>{formatCurrency(p.current_price)}</td>
+                    <td>{formatPercent(p.unrealized_pnl_pct)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 

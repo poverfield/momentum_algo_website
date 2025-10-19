@@ -383,6 +383,62 @@ Set in Render → Service → Environment (copy values from your `backend/.env`)
 - Security (optional): Add a bearer token for write endpoints (`POST /api/algorithm/run`, `POST /api/sync`).
 - Backups (optional): Use APScheduler to copy `trading.db` nightly to a dated backup; optionally upload to cloud storage.
 
+## 📤 Git: Pushing Changes to GitHub
+
+Run these in the project root (where the `.git` directory is). Replace `YOUR_USER/YOUR_REPO.git` and branch names as needed.
+
+### First time (new repo or no remote set)
+```bash
+# Initialize and commit (if not already a git repo)
+git init
+git add -A
+git commit -m "Initial commit"
+
+# Point to your GitHub repo
+git remote add origin https://github.com/YOUR_USER/YOUR_REPO.git
+
+# Push main (or default) branch
+git branch -M main
+git push -u origin main
+```
+
+### Normal workflow (existing repo)
+```bash
+# See what changed
+git status
+
+# Create a feature branch (recommended)
+git checkout -b feature/alpaca-live-positions
+
+# Stage and commit
+git add -A
+git commit -m "Add Alpaca live positions, synced_at, percent unrealized, tooltips, EST times"
+
+# Push branch to GitHub
+git push -u origin feature/alpaca-live-positions
+```
+
+### Update main and your branch
+```bash
+# Get latest main
+git checkout main
+git pull --rebase origin main
+
+# Rebase your branch onto updated main
+git checkout feature/alpaca-live-positions
+git fetch origin
+git rebase origin/main
+
+# Push updates (use --force-with-lease if rebased)
+git push --force-with-lease
+```
+
+### Configure git identity (one-time per machine)
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "your.email@example.com"
+```
+
 ## 🤝 Contributing
 
 1. Always test with paper trading first

@@ -174,7 +174,7 @@ class TradingAlgorithm:
                         
                         # Signal strength calculation (momentum 40%, MACD 30%, RSI 30%)
                         momentum_strength = (31 - momentum_rank) / 30  # Higher rank = higher strength
-                        macd_strength = min(abs(macd_data['macd'].iloc[-1]) / 2, 1)  # Normalize MACD
+                        macd_strength = min(abs(macd_data['histogram'].iloc[-1]) / 2, 1)  # Normalize MACD
                         rsi_strength = min((rsi_data['rsi'].iloc[-1] - 50) / 50, 1)  # RSI above 50
                         
                         signal_strength = (momentum_strength * 0.4 + 
@@ -358,8 +358,12 @@ class TradingAlgorithm:
             if len(macd_data) < 2:
                 return False
             
-            current_macd = macd_data['macd'].iloc[-1]
-            prev_macd = macd_data['macd'].iloc[-2]
+            # changes from claude b/c this is referencing the macd line, when we want to histogram line
+            # current_macd = macd_data['macd'].iloc[-1] 
+            # prev_macd = macd_data['macd'].iloc[-2]
+
+            current_macd = macd_data['histogram'].iloc[-1]
+            prev_macd = macd_data['histogram'].iloc[-2]
             
             # Bullish conditions:
             # 1. MACD crosses above zero
