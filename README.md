@@ -457,5 +457,6 @@ For issues or questions:
 2. Run the validation test script
 3. Verify environment variables
 4. Check Alpaca API credentials and permissions
-#   m o m e n t u m _ a l g o _ w e b s i t e  
+#   m o m e n t u m _ a l g o _ w e b s i t e 
+ 
  

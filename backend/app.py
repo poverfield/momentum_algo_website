@@ -145,6 +145,19 @@ def get_account():
         logger.error(f"Error getting account info: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/signals/top', methods=['GET'])
+def get_signals_top():
+    """Return the latest top-30 momentum stocks for the most recent signal_date.
+    Response: { date: str | null, items: [{ symbol, momentum_value, macd_value, rsi_value, momentum_rank }...] }
+    """
+    try:
+        limit = int(request.args.get('limit', 30))
+        latest_date, items = db_service.get_latest_top_momentum(limit=limit)
+        return jsonify({ 'date': latest_date, 'items': items })
+    except Exception as e:
+        logger.error(f"Error getting top momentum signals: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/dashboard', methods=['GET'])
 def get_dashboard():
     """Get dashboard data including portfolio summary and recent activity"""
@@ -324,13 +337,17 @@ def get_diagnostics():
 
 @app.route('/api/trades', methods=['GET'])
 def get_trades():
-    """Get trade history with pagination"""
+    """Get trade history with pagination and optional filters"""
     try:
         page = int(request.args.get('page', 1))
         per_page = int(request.args.get('per_page', 50))
-        
-        trades, total = db_service.get_trades_paginated(page, per_page)
-        
+        trade_date = request.args.get('date')
+        symbol = request.args.get('symbol')
+
+        logger.info(f"/api/trades params page={page} per_page={per_page} date={trade_date} symbol={symbol}")
+        trades, total = db_service.get_trades_paginated(page, per_page, trade_date, symbol)
+        logger.info(f"/api/trades returning {len(trades)} rows (total={total})")
+
         return jsonify({
             'trades': trades,
             'pagination': {

@@ -122,6 +122,36 @@ class DatabaseService:
                 conn.execute('CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol)')
                 conn.execute('CREATE INDEX IF NOT EXISTS idx_signals_date ON daily_signals(signal_date)')
                 conn.execute('CREATE INDEX IF NOT EXISTS idx_algorithm_runs_date ON algorithm_runs(run_date)')
+                # Ensure one row per (signal_date, symbol)
+                try:
+                    # Remove duplicates first (keep latest created_at when available)
+                    conn.execute('''
+                        DELETE FROM daily_signals
+                        WHERE rowid NOT IN (
+                          SELECT rowid FROM (
+                            SELECT rowid
+                            FROM daily_signals AS ds
+                            JOIN (
+                              SELECT signal_date, symbol, MAX(created_at) AS max_created
+                              FROM daily_signals
+                              GROUP BY signal_date, symbol
+                            ) AS latest
+                            ON ds.signal_date = latest.signal_date AND ds.symbol = latest.symbol AND (
+                              ds.created_at = latest.max_created OR latest.max_created IS NULL
+                            )
+                            GROUP BY ds.signal_date, ds.symbol
+                          )
+                        )
+                    ''')
+                except Exception:
+                    # Fallback: keep the earliest row if created_at missing
+                    conn.execute('''
+                        DELETE FROM daily_signals
+                        WHERE rowid NOT IN (
+                          SELECT MIN(rowid) FROM daily_signals GROUP BY signal_date, symbol
+                        )
+                    ''')
+                conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS uniq_daily_signals ON daily_signals(signal_date, symbol)')
                 
                 conn.commit()
                 logger.info("Database initialized successfully")
@@ -222,12 +252,22 @@ class DatabaseService:
                         (signal_date, symbol, signal_strength, momentum_rank, momentum_value,
                          macd_value, rsi_value, is_top_momentum, macd_bullish, rsi_bullish, action_taken)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(signal_date, symbol) DO UPDATE SET
+                          signal_strength=excluded.signal_strength,
+                          momentum_rank=excluded.momentum_rank,
+                          momentum_value=excluded.momentum_value,
+                          macd_value=excluded.macd_value,
+                          rsi_value=excluded.rsi_value,
+                          is_top_momentum=excluded.is_top_momentum,
+                          macd_bullish=excluded.macd_bullish,
+                          rsi_bullish=excluded.rsi_bullish,
+                          action_taken=excluded.action_taken
                     ''', (
-                        signal['signal_date'], signal['symbol'], signal['signal_strength'],
+                        signal['signal_date'], signal['symbol'], signal.get('signal_strength'),
                         signal.get('momentum_rank'), signal.get('momentum_value'),
                         signal.get('macd_value'), signal.get('rsi_value'),
-                        signal.get('is_top_momentum', False), signal.get('macd_bullish', False),
-                        signal.get('rsi_bullish', False), signal.get('action_taken')
+                        1 if signal.get('is_top_momentum', False) else 0, 1 if signal.get('macd_bullish', False) else 0,
+                        1 if signal.get('rsi_bullish', False) else 0, signal.get('action_taken')
                     ))
                 
                 conn.commit()
@@ -445,24 +485,41 @@ class DatabaseService:
             logger.error(f"Error getting algorithm status: {e}")
             return {}
     
-    def get_trades_paginated(self, page: int, per_page: int) -> Tuple[List[Dict], int]:
-        """Get paginated trades"""
+    def get_trades_paginated(self, page: int, per_page: int,
+                              trade_date: Optional[str] = None,
+                              symbol: Optional[str] = None) -> Tuple[List[Dict], int]:
+        """Get paginated trades with optional filters by date and symbol"""
         try:
             with self.get_connection() as conn:
+                where = []
+                params: List = []
+                if trade_date:
+                    where.append('trade_date = ?')
+                    params.append(trade_date)
+                if symbol:
+                    # Partial match, case-insensitive
+                    where.append('UPPER(symbol) LIKE ?')
+                    params.append(f"%{symbol.upper()}%")
+
+                where_sql = f"WHERE {' AND '.join(where)}" if where else ''
+
                 # Get total count
-                cursor = conn.execute('SELECT COUNT(*) as total FROM trades')
+                cursor = conn.execute(f'SELECT COUNT(*) as total FROM trades {where_sql}', params)
                 total = cursor.fetchone()['total']
-                
+
                 # Get paginated results
                 offset = (page - 1) * per_page
-                cursor = conn.execute('''
-                    SELECT id, trade_date, symbol, action, quantity, price, 
+                cursor = conn.execute(
+                    f'''
+                    SELECT id, trade_date, symbol, action, quantity, price,
                            signal_strength, reason, pnl, created_at
-                    FROM trades 
-                    ORDER BY created_at DESC 
+                    FROM trades
+                    {where_sql}
+                    ORDER BY created_at DESC
                     LIMIT ? OFFSET ?
-                ''', (per_page, offset))
-                
+                    ''', params + [per_page, offset]
+                )
+
                 trades = []
                 for row in cursor.fetchall():
                     trades.append({
@@ -476,9 +533,9 @@ class DatabaseService:
                         'reason': row['reason'],
                         'pnl': float(row['pnl']) if row['pnl'] else None
                     })
-                
+
                 return trades, total
-                
+
         except Exception as e:
             logger.error(f"Error getting paginated trades: {e}")
             return [], 0
@@ -620,3 +677,47 @@ class DatabaseService:
         except Exception as e:
             logger.error(f"Error getting paginated algorithm runs: {e}")
             return [], 0
+
+    def get_latest_top_momentum(self, limit: int = 30) -> Tuple[Optional[str], List[Dict]]:
+        """Return the latest signal_date that has top-momentum flags and up to `limit` rows.
+        Rows are ordered by momentum_value DESC so the strongest momentum appears first.
+        Returns a tuple of (signal_date, rows).
+        """
+        try:
+            with self.get_connection() as conn:
+                # Find the most recent date that has any top momentum rows
+                cur = conn.execute(
+                    '''SELECT signal_date
+                       FROM daily_signals
+                       WHERE is_top_momentum = 1
+                       ORDER BY signal_date DESC
+                       LIMIT 1'''
+                )
+                row = cur.fetchone()
+                if not row:
+                    return None, []
+                latest_date = row['signal_date']
+
+                # Fetch up to `limit` rows for that date
+                cur = conn.execute(
+                    '''SELECT symbol, momentum_value, macd_value, rsi_value, momentum_rank
+                       FROM daily_signals
+                       WHERE signal_date = ? AND is_top_momentum = 1
+                       ORDER BY momentum_value DESC
+                       LIMIT ?''', (latest_date, limit)
+                )
+
+                items: List[Dict] = []
+                for r in cur.fetchall():
+                    items.append({
+                        'symbol': r['symbol'],
+                        'momentum_value': float(r['momentum_value']) if r['momentum_value'] is not None else None,
+                        'macd_value': float(r['macd_value']) if r['macd_value'] is not None else None,
+                        'rsi_value': float(r['rsi_value']) if r['rsi_value'] is not None else None,
+                        'momentum_rank': r['momentum_rank']
+                    })
+
+                return latest_date, items
+        except Exception as e:
+            logger.error(f"Error getting latest top momentum: {e}")
+            return None, []

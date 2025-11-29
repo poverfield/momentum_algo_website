@@ -40,6 +40,11 @@ export async function getDiagnostics(params) {
   return data
 }
 
+export async function getTopSignals(params) {
+  const { data } = await api.get('/api/signals/top', { params })
+  return data
+}
+
 export async function postRun() {
   const { data } = await api.post('/api/algorithm/run')
   return data

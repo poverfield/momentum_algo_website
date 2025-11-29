@@ -357,6 +357,119 @@ class AlpacaService:
             error_msg = str(e)
             logger.error(f"Error cancelling order {order_id}: {error_msg}")
             return {'success': False, 'error': error_msg}
+
+    def list_open_stop_orders(self, symbol: Optional[str] = None) -> List[Dict]:
+        """Return open stop-type orders (sell side) optionally filtered by symbol."""
+        try:
+            if self.api is None:
+                return []
+
+            orders = self.api.list_orders(status='open', direction='desc')
+            out: List[Dict] = []
+            for o in orders:
+                try:
+                    o_type = getattr(o, 'type', None)
+                    o_side = getattr(o, 'side', None)
+                    o_symbol = getattr(o, 'symbol', None)
+                    if o_side == 'sell' and o_type in ('stop', 'stop_limit', 'trailing_stop'):
+                        if symbol is None or o_symbol == symbol:
+                            out.append({
+                                'order_id': getattr(o, 'id', None),
+                                'symbol': o_symbol,
+                                'quantity': int(getattr(o, 'qty', 0) or 0),
+                                'side': o_side,
+                                'type': o_type,
+                                'status': getattr(o, 'status', None),
+                                'submitted_at': getattr(o, 'submitted_at', None)
+                            })
+                except Exception:
+                    continue
+            return out
+        except Exception as e:
+            logger.error(f"Error listing open stop orders: {e}")
+            return []
+
+    def has_open_stop_order(self, symbol: str) -> bool:
+        """True if there is any open stop-type sell order for symbol."""
+        try:
+            return len(self.list_open_stop_orders(symbol)) > 0
+        except Exception:
+            return False
+
+    def cancel_open_stop_orders(self, symbol: str) -> Dict:
+        """Cancel all open stop-type sell orders for symbol. Returns summary."""
+        try:
+            canceled = 0
+            errors: List[str] = []
+            for o in self.list_open_stop_orders(symbol):
+                res = self.cancel_order(o['order_id'])
+                if res.get('success'):
+                    canceled += 1
+                else:
+                    errors.append(res.get('error') or 'unknown')
+            return {'success': True, 'canceled': canceled, 'errors': errors}
+        except Exception as e:
+            logger.error(f"Error canceling open stop orders for {symbol}: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def place_oto_buy_with_stop(
+        self,
+        symbol: str,
+        quantity: int,
+        stop_price: float,
+        order_type: str = 'market',
+        limit_price: Optional[float] = None
+    ) -> Dict:
+        """
+        Place an OTO (one-triggers-other) order: a parent BUY and a child STOP-loss SELL.
+        - stop_price: absolute stop trigger price for the child order.
+        - order_type: 'market' or 'limit' for the parent.
+        - limit_price: required if order_type is 'limit'.
+        Returns dict similar to place_buy_order.
+        """
+        try:
+            if self.api is None:
+                return {'success': False, 'error': 'Alpaca API not initialized'}
+
+            if quantity <= 0:
+                return {'success': False, 'error': 'Quantity must be positive'}
+
+            params = dict(
+                symbol=symbol,
+                qty=quantity,
+                side='buy',
+                type=order_type,
+                time_in_force='day',
+                order_class='oto',
+                stop_loss={'stop_price': float(stop_price)},
+                extended_hours=self.extended_hours
+            )
+
+            if order_type == 'limit':
+                if limit_price is None:
+                    return {'success': False, 'error': 'limit_price is required for limit OTO orders'}
+                params['limit_price'] = float(limit_price)
+
+            order = self.api.submit_order(**params)
+
+            logger.info(f"OTO buy-with-stop placed: {quantity} {symbol}, stop={stop_price}")
+            return {
+                'success': True,
+                'order_id': order.id,
+                'symbol': order.symbol,
+                'quantity': int(order.qty),
+                'side': order.side,
+                'type': order.type,
+                'status': order.status,
+                'submitted_at': order.submitted_at,
+                'filled_at': order.filled_at,
+                'filled_qty': int(order.filled_qty) if order.filled_qty else 0,
+                'filled_avg_price': float(order.filled_avg_price) if order.filled_avg_price else None
+            }
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"Error placing OTO buy-with-stop for {symbol}: {error_msg}")
+            return {'success': False, 'error': error_msg}
     
     def get_portfolio_history(self, period: str = '1M', timeframe: str = '1D') -> Optional[Dict]:
         """Get portfolio history"""

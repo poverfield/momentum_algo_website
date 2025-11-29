@@ -68,7 +68,7 @@ signal_strength = (momentum_rank * 0.4 + macd_strength * 0.3 + rsi_strength * 0.
 - Position size: Equal weight (portfolio_value / 15)
 
 **Cash Management:**
-- Excess cash automatically invested in S&P 500 (^GSPC)
+- Excess cash automatically invested in S&P 500 (ticker: VOO)
 - 5% cash buffer maintained for new trades
 - S&P 500 shares sold as needed to fund new positions
 
